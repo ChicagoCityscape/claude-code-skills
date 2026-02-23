@@ -290,9 +290,24 @@ Example response:
 ```json
 {
   "types": [
-    { "type": "censusblock", "count": "574546" },
-    { "type": "municipality", "count": "2344" },
-    { "type": "ward", "count": "50" }
+    {
+      "type": "censusblock",
+      "count": "574546",
+      "name": "Census Block",
+      "description": "..."
+    },
+    {
+      "type": "ward",
+      "count": "50",
+      "name": "Chicago Ward",
+      "description": "Map of current Chicago wards that are based on 2020 Census data that was adopted on May 16, 2022."
+    },
+    {
+      "type": "communityarea",
+      "count": "77",
+      "name": "Community Area",
+      "description": "Chicago's 77 official boundaries created for sociological surveys."
+    }
   ],
   "count": 109,
   "notes": [
