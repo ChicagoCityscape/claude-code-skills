@@ -4,8 +4,8 @@ description: >
   Describes how to interact with the Chicago Cityscape API. Use when the user
   asks about API access, API keys, API endpoints, how to query property data
   programmatically, or how to integrate Chicago Cityscape data into their own
-  application. Covers the Property Report API, Zoning API, Parcels API, and
-  Places API.
+  application. Covers the Property Report API, Zoning API, Parcels API, Places
+  API, and Sources API.
 allowed-tools:
   - Bash
 ---
@@ -342,6 +342,129 @@ curl "https://chicagocityscape.com/php/api.map.php?method=boundary&place=communi
 
 # Neighborhood
 curl "https://chicagocityscape.com/php/api.map.php?method=boundary&place=neighborhood-avondale"
+```
+
+---
+
+### 5. Sources API
+
+Returns the list of data sources that power Chicago Cityscape, with search and
+filtering by site feature. Useful for discovering which datasets underlie a
+given part of the site, or for building a data catalog.
+
+**Endpoint**: `https://chicagocityscape.com/api/sources.php`
+
+**Authentication**: Requires the user to be signed in (session cookie). No API
+key parameter. Returns HTTP 401 if not authenticated.
+
+**Caching**: Responses are cached for 24 hours.
+
+#### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `q` | string | No | Free-text search across name, description, keywords, and "how we use it" |
+| `page` | string | No | Filter to sources used on a specific site feature (see identifiers below) |
+| `limit` | integer | No | Max results to return (1–50, default 20) |
+
+#### Page identifiers
+
+Pass one of these values as the `page` parameter to filter by site feature:
+
+| Identifier | Feature |
+|---|---|
+| `property_report` | Property Report |
+| `place_report` | Place Report |
+| `property_finder` | Property Finder |
+| `incentives_checker` | Incentives Checker |
+| `violations_browser` | Building Violations Browser |
+| `tif_projects` | TIF Projects |
+| `permits` | Permits |
+| `permits_analytics` | Permits Analytics |
+| `site_locator` | Site Locator |
+| `building_visualizer` | 3D Building Visualizer |
+| `demographics_snapshot` | Demographics Snapshot |
+| `housing_landmarks_snapshot` | Housing & Landmarks Snapshot |
+| `environmental_snapshot` | Environmental & Land Use Snapshot |
+| `logistics_snapshot` | Logistics Snapshot |
+| `amenities_snapshot` | Amenities & Social Infrastructure |
+| `businesses_snapshot` | Businesses Snapshot |
+| `adu` | ADU |
+| `sales_dashboard` | Sales Dashboard |
+
+#### Response Structure
+
+```json
+{
+  "query": "LIHTC",
+  "page_filter": null,
+  "count": 2,
+  "results": [
+    {
+      "name": "LIHTC (Low-Income Housing Tax Credits)",
+      "desc": "Locations of developments that have received Low Income Housing Tax Credits.",
+      "how": "Appears in Incentives Checker and Housing & Landmarks Snapshot.",
+      "frequency": "As needed",
+      "prefix": null,
+      "sources": [
+        {
+          "source": "HUD LIHTC database",
+          "source_url": "https://www.huduser.gov/portal/datasets/lihtc.html"
+        }
+      ],
+      "kw": "affordable housing, tax credits, LIHTC",
+      "date_updated": null,
+      "date_updated_note": null,
+      "pages": [
+        {
+          "id": "incentives_checker",
+          "label": "Incentives Checker",
+          "url": "/incentiveschecker"
+        },
+        {
+          "id": "housing_landmarks_snapshot",
+          "label": "Housing & Landmarks Snapshot",
+          "url": null
+        }
+      ]
+    }
+  ]
+}
+```
+
+Key response fields:
+
+- `query` / `page_filter` — echo back the inputs you provided
+- `count` — number of results in this response
+- `results[].name` — source name
+- `results[].desc` — dataset description
+- `results[].how` — human-readable explanation of how it is used on the site
+- `results[].sources` — origin data sources, each with `source` and `source_url`
+- `results[].pages` — site features where this data appears, each with `id`, `label`, and `url`
+
+#### Example Requests
+
+```bash
+# All sources (up to 20)
+curl "https://chicagocityscape.com/api/sources.php"
+
+# Search for LIHTC-related sources
+curl "https://chicagocityscape.com/api/sources.php?q=LIHTC"
+
+# All sources used in the Incentives Checker
+curl "https://chicagocityscape.com/api/sources.php?page=incentives_checker"
+
+# Zoning sources in Property Reports, max 5
+curl "https://chicagocityscape.com/api/sources.php?q=zoning&page=property_report&limit=5"
+```
+
+#### Error Response (not authenticated)
+
+```json
+{
+  "error": "Unauthorized",
+  "message": "Sign in to access the sources API"
+}
 ```
 
 ---
