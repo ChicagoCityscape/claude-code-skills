@@ -5,10 +5,17 @@ description: >
   asks about API access, API keys, API endpoints, how to query property data
   programmatically, or how to integrate Chicago Cityscape data into their own
   application. Covers the Property Report API, Zoning API, Parcels API, Places
-  API, and Sources API.
+  API, Sources API, Query API, Zoning Explorer API, and Search API.
 allowed-tools:
   - Bash
 ---
+
+> **How Claude should fetch these APIs:** Cloudflare returns HTTP 403 to
+> Claude's native `WebFetch` tool (and to the Claude Desktop/web app's built-in
+> web fetch), so use `curl` via Bash instead. A normal `curl` request passes
+> Cloudflare and reaches the PHP endpoint. If you only have WebFetch available
+> (e.g. Claude Desktop with no shell), these endpoints are currently
+> unreachable until the site allowlists Anthropic's fetcher user agents.
 
 # Chicago Cityscape API Guide
 
@@ -465,6 +472,258 @@ curl "https://chicagocityscape.com/api/sources.php?q=zoning&page=property_report
   "error": "Unauthorized",
   "message": "Sign in to access the sources API"
 }
+```
+
+---
+
+### 6. Query API
+
+Runs a previously-cached DataTables/SSP query by its `sql_common_id` and returns
+the rows as JSON, with pagination. This lets you re-fetch the exact result set
+behind a table you generated on the site (e.g. a Property Finder export) without
+re-specifying all the filters.
+
+**Endpoint**: `https://chicagocityscape.com/api/query.php`
+
+**Authentication**: Requires an API key of type **`query_api`** (a distinct key
+type from the Property Report / Zoning / Parcels key). Pass it as `key`.
+
+#### Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `key` | Yes | Your `query_api` API key |
+| `sql_common_id` | Yes | The cached query identifier (letters, digits, underscores only). Returned as `sql_common_id` / `common_id` in every SSP API response. |
+| `limit` | No | Rows per page, clamped 1–1000 (default 25) |
+| `offset` | No | Pagination offset (default 0) |
+
+#### Response Structure
+
+```json
+{
+  "data": [ { "...": "one object per row" } ],
+  "meta": {
+    "sql_common_id": "abc123",
+    "limit": 25,
+    "offset": 0,
+    "row_count": 25,
+    "order": [ { "field": "address", "direction": "asc" } ],
+    "elapsed_time": 0.08,
+    "timestamp": "..."
+  }
+}
+```
+
+The `geojson` and `tax_history` fields (when present) are decoded into JSON
+objects rather than returned as escaped strings. The `meta.order` array echoes
+the sort order captured from the original DataTables request.
+
+#### Example Request
+
+```bash
+curl "https://chicagocityscape.com/api/query.php?sql_common_id=YOUR_COMMON_ID&limit=100&key=YOUR_QUERY_API_KEY"
+```
+
+#### Error Responses
+
+```json
+{ "error": ["Key not found or not authorized for this endpoint"] }
+{ "error": ["sql_common_id is required"] }
+{ "error": ["Query not found or expired; the sql_common_id may be invalid or the cache may have expired"] }
+```
+
+---
+
+### 7. Zoning Explorer API
+
+Returns a zoning-district breakdown for a Chicago Place (ward, community area,
+neighborhood, etc.) — how much land falls in each zoning class, including a
+residential-only summary and Planned Development / PMD names — or the list of
+available zoning map vintages.
+
+**Endpoint**: `https://chicagocityscape.com/api/zoningexplorer.php`
+
+**Authentication**: Requires an API key of type **`zoning_explorer_api`**. Pass
+it as `key`. An `endpoint` parameter is always required.
+
+**Caching**: `vintages` is cached 7 days; `assessment` is cached 24 hours.
+
+#### Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `key` | Yes | Your `zoning_explorer_api` key |
+| `endpoint` | Yes | `assessment` or `vintages` |
+| `place` | For `assessment` | Chicago Place slug, format `{type}-{identifier}` (e.g. `ward-32`, `communityarea-lincoln-square`) |
+| `vintage` | No | A zoning table name from the `vintages` endpoint. Omit to use the current zoning map. |
+
+Only **Chicago** place slugs are supported. Zones smaller than 1,000 sq ft are
+excluded. `area_sqft` is in the Illinois East State Plane projection (EPSG:3435).
+
+#### `endpoint=vintages` — list available zoning map vintages
+
+```bash
+curl "https://chicagocityscape.com/api/zoningexplorer.php?endpoint=vintages&key=YOUR_KEY"
+```
+
+```json
+{
+  "success": true,
+  "current": "zoning_20260514_144516",
+  "vintages": [
+    { "table": "zoning_20260514_144516", "name": "...", "current": true }
+  ]
+}
+```
+
+#### `endpoint=assessment` — zoning breakdown for a place
+
+```bash
+curl "https://chicagocityscape.com/api/zoningexplorer.php?endpoint=assessment&place=ward-32&key=YOUR_KEY"
+```
+
+Response (abridged):
+
+```json
+{
+  "success": true,
+  "place":   { "slug": "ward-32", "name": "...", "type": "ward" },
+  "vintage": "zoning_20260514_144516",
+  "analysis": {
+    "area": { "area_sqft": 0, "area_acres": 0 },
+    "standard_zone_count": 0,
+    "pd_count": 0,
+    "pmd_count": 0,
+    "standard_zones": [],
+    "planned_developments": [],
+    "pmds": [],
+    "residential_summary": { "zone_count": 0, "total_area_sqft": 0, "zones": [] }
+  },
+  "data": [
+    {
+      "zone_class": "RS-3",
+      "zone_description": "...",
+      "area_sqft": 0,
+      "area_acres": 0,
+      "percentage": 0,
+      "pd_name": null
+    }
+  ]
+}
+```
+
+`data[]` is the per-zone breakdown (PD rows include a `pd_name`);
+`analysis.residential_summary` re-computes each residential-allowing zone's
+share of the residential-only total.
+
+---
+
+### 8. Search API
+
+Authenticated, rate-limited Typesense search over ~7 million documents in nine
+collections — the same index that powers the site's Command-K search. Full
+OpenAPI reference is served at
+`https://www.chicagocityscape.com/api/search/docs`.
+
+**Base path**: `https://www.chicagocityscape.com/api/search`
+
+**Access**: Included with Real Estate Pro (`pro_2020`) or Enterprise. Use the
+**same key** as the Property Report / Zoning / Parcels APIs.
+
+**Authentication**: Prefer the header `Authorization: Bearer YOUR_KEY` (keeps the
+key out of access logs); the `?key=YOUR_KEY` query form also works for quick
+tests.
+
+**Rate limits**: 60 req/min and 5,000 req/day per key; the `properties`
+collection has a stricter 30 req/min sub-cap. Limits are halved during the Sunday
+04:30–06:30 properties rebuild and the ~10:00 permits sync.
+
+**Pagination**: `per_page` ≤ 50, `page` ≤ 20 (over-cap values are clamped and
+noted in the response `notes[]`).
+
+#### Collections
+
+| Collection | Contents | Approx. docs |
+|-----------|----------|--------------|
+| `pages` | Cityscape feature pages & tags | 140 |
+| `kb_articles` | Knowledge Base articles | 214 |
+| `places` | Boundaries (wards, community areas, neighborhoods…) | 23.7K |
+| `names` | Businesses, people, ordinance sponsors | 800K |
+| `properties` | Parcels across 6 counties | 3.2M |
+| `blog_posts` | Blog posts | 449 |
+| `ptax` | Property transaction records (PTAX-203) | 1.86M |
+| `permits` | Chicago building permits | 1.12M |
+| `developments` | Active development ordinances w/ staff summaries | 1,882 |
+
+#### Endpoints
+
+| Method & path | Purpose |
+|---|---|
+| `GET /api/search/{collection}` | Search one collection |
+| `GET /api/search/multi` | Search all allowed collections with one query |
+| `POST /api/search/multi` | Search multiple collections, custom params per collection (JSON body `{ "searches": [ { "collection": "...", ... } ] }`) |
+| `GET /api/search/catalog` | Machine-readable list of collections and their searchable/filterable/facetable fields |
+
+#### Key Query Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `q` | Search text; use `*` to match everything (pair with `filter_by`) |
+| `query_by` | Comma-separated fields to full-text search (collection-specific default) |
+| `filter_by` | Typesense filter expression (allowlisted fields only). Repeat the param to AND clauses without URL-encoding `&&`. |
+| `sort_by` | Sort expression, e.g. `location(41.88,-87.63):asc,_text_match:desc` |
+| `facet_by` | Fields to aggregate counts for |
+| `per_page` / `page` | Pagination (≤ 50 / ≤ 20) |
+| `num_typos` | Typo tolerance, clamped 0–2 (default 1) |
+
+Four collections (`permits`, `places`, `blog_posts`, `kb_articles`) support geo
+`filter_by=location:(lat, lng, radius mi|km)`, bounding-box, and polygon
+filters, plus `sort_by=location(lat,lng):asc`. `properties` is **not** geo-enabled
+— filter it by `county_id`, `city`, `zip`, `property_class`, `zoning_class`, or
+`area` instead. `county_id` values: `il-cook`, `il-lake`, `il-dupage`, `il-will`,
+`il-peoria`, `il-sangamon`, `in-lake` (permits are Chicago-only, no `county_id`).
+
+#### Response Envelope
+
+```json
+{
+  "success": true,
+  "collection": "permits",
+  "data": { "results": [], "found": 123, "page": 1, "facets": [] },
+  "took_ms": 42,
+  "rate_limit_remaining": 58,
+  "notes": []
+}
+```
+
+Each hit carries Typesense's raw `text_match` plus a derived `confidence` in
+`[0,1]`, normalized against the top hit **within the same response** (not
+comparable across queries). Errors return `"success": false`, an `error[]`
+array, and `http_status`.
+
+#### Example Requests
+
+```bash
+# Single collection, Bearer auth
+curl -H "Authorization: Bearer YOUR_KEY" \
+  "https://www.chicagocityscape.com/api/search/permits?q=mansard&per_page=5"
+
+# Filter permits by architect within 1 mile of the Loop (repeatable filter_by)
+curl -G -H "Authorization: Bearer YOUR_KEY" \
+  "https://www.chicagocityscape.com/api/search/permits" \
+  --data-urlencode "q=*" \
+  --data-urlencode "filter_by=architect:=Studio Gang" \
+  --data-urlencode "filter_by=location:(41.8781, -87.6298, 1 mi)"
+
+# RS-3 parcels between 3,000 and 6,000 sq ft in Cook County
+curl -G "https://www.chicagocityscape.com/api/search/properties" \
+  --data-urlencode "key=YOUR_KEY" \
+  --data-urlencode "q=*" \
+  --data-urlencode "filter_by=county_id:=il-cook && zoning_class:=RS-3 && area:>=3000 && area:<=6000"
+
+# Discover collections and their fields
+curl -H "Authorization: Bearer YOUR_KEY" \
+  "https://www.chicagocityscape.com/api/search/catalog"
 ```
 
 ---
