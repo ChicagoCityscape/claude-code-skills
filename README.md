@@ -10,12 +10,6 @@ Describes how to interact with the Chicago Cityscape API. Covers all public endp
 
 **Triggers on**: questions about API access, API keys, API endpoints, querying property data programmatically, or integrating Chicago Cityscape data into an application.
 
-**Endpoints documented**:
-- Property Report API (`/api/index.php`) — full property data as GeoJSON
-- Zoning API (`/api/zoning.php`) — zoning standards for any Chicago zoning class
-- Parcels API (`/api/parcels.php`) — parcel geometries filtered by place, boundary, or radius
-- Places API (`/api/places.php`) — place boundaries, type discovery, and keyword search
-
 ## Installation
 
 Clone this repo and symlink each skill directory into your Claude Code global skills folder:
