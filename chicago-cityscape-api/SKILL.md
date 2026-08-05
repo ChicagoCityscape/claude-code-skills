@@ -5,7 +5,8 @@ description: >
   asks about API access, API keys, API endpoints, how to query property data
   programmatically, or how to integrate Chicago Cityscape data into their own
   application. Covers the Property Report API, Zoning API, Parcels API, Places
-  API, Sources API, Query API, Zoning Explorer API, and Search API. NOTE:
+  API, Sources API, Query API, Zoning Explorer API, Search API, and Incentives
+  Dictionary API. NOTE:
   actually fetching these endpoints requires an environment with unrestricted
   network egress (Claude Code, a local terminal, a server, or the API/SDK). The
   claude.ai web/desktop app CANNOT reach the API from its sandbox — there, use
@@ -100,10 +101,62 @@ Then map the answers to endpoints:
 | Zoning-class breakdown for a whole place | Zoning Explorer API (`/api/zoningexplorer.php`) |
 | Rows behind a DataTables view on the site | Query API (`/api/query.php`) |
 | Which datasets power a site feature | Sources API (`/api/sources.php`) |
+| Definitions of the incentive programs | Incentives Dictionary API (`/api/incentives.php`) |
 
 State the endpoint(s) and parameters you intend to call and confirm with the user
 before running anything. For bulk pulls, confirm the expected result size and the
 pagination/limit plan so you do not accidentally issue hundreds of calls.
+
+---
+
+## Guidance when advising the user on results
+
+When you interpret API results and make recommendations, follow these rules:
+
+- **Never state a property attribute the API did not actually return.** Only
+  describe facts that appear in the response. In particular, the API does NOT tell
+  you whether a parcel is a **corner lot**, an interior/through lot, its
+  orientation, frontage, or shape — so never call a property a "corner lot" (or
+  assert its dimensions, frontage, or orientation) unless a field in the response
+  explicitly says so. If such a detail matters to the analysis, tell the user it
+  is not in the data and would need to be confirmed from a plat, survey, or aerial
+  image. Treat lot area (`area_sqft`), zoning, PIN, and address as the reliable
+  facts; do not embellish beyond them.
+
+- **Do not recommend assemblage (combining lots) unless the properties are
+  actually adjacent and abutting.** Only suggest assembling parcels when you have
+  verified from the data (shared boundaries / touching geometries, or consecutive
+  PINs on the same block face) that the lots physically abut one another. Do not
+  suggest assembling parcels that merely happen to be nearby, in the same
+  neighborhood, or owned by the same party.
+- **Even when parcels do abut, do not provide instructions on how to carry out an
+  assemblage** (e.g. how to negotiate, acquire, legally combine, or re-subdivide
+  the lots). You may note that the abutting parcels *could* be considered together;
+  leave the how-to to the user's own attorneys and advisors.
+- **When a property has incentives, offer to explain what each one means.** If you
+  requested `get_incentives=true` and the response lists incentives that apply to
+  the property, do not just name them — ask the user whether they would also like
+  to learn what each incentive means. If they say yes, summarize each applicable
+  incentive using the descriptive text carried in the `incentives` array items
+  (each item includes a name and human-readable description). Do not invent
+  eligibility rules or dollar figures that are not in the response. For generic
+  definitions of any incentive (not tied to a property), use the Incentives
+  Dictionary API (`/api/incentives.php`) rather than writing definitions from
+  memory.
+- **Transit-Served Location parking: the minimum is eliminated, not "0.5/unit".**
+  The Zoning API's `parking_min_ratio_tod` value (often 0.5) is only the reduced
+  minimum written in the zoning code — it is NOT the operative requirement for a
+  property that qualifies as a Transit-Served Location (TSL). When the Property
+  Report API returns `tsl.likely_eligible = true` (or a parcel is flagged
+  transit-served / `tsl_eligible: true`), state that the residential vehicle
+  **parking minimum is eliminated (0 required)**, not reduced to 0.5. This is
+  because Chicago's Connected Communities / Transit-Served Location ordinance has
+  applied in all zoning districts since September 25, 2025, and the Illinois
+  People Over Parking Act (effective June 1, 2026) eliminates minimum parking in
+  qualifying locations statewide — both override the code's 0.5 figure. Never
+  present `0.5/unit` as the required minimum for a transit-served property; cite it
+  only as the pre-waiver zoning-code number if it is relevant. The Zoning API's
+  `tod_parking` object carries this same caveat.
 
 ---
 
@@ -176,6 +229,13 @@ These parameters add data to the response but increase response time:
 | `get_characteristics=true` | Physical characteristics from Cook County Assessor | Requires PIN |
 | `get_sales=true` | Property sales from PTAX records | Requires PIN; Illinois only |
 | `get_recordings=true` | Property recordings data | Requires PIN; Cook County only |
+| `get_exempt_owner=true` | Owner/steward of an exempt or publicly-held parcel, matched from the Assessor exempt-properties list, the City owned-land inventory, and the CCLBA inventory | Requires PIN; Cook County only. Most useful when the parcel's property class is `EX`. Adds an `exempt_owner` object |
+| `get_streetview=true` | URL of the cached Google Street View image (served from DO Spaces) | Adds a `street_view_image_url` property. Returns `null` unless the image was already generated — this never triggers a new (paid) Street View fetch |
+
+The `exempt_owner` object has three keys — `assessor_exempt`, `chicago_owned_land`,
+and `cclba` — each holding the matched record or `null` when the PIN is absent from
+that source. When a property's class is `EX`, offer the user this lookup, since the
+normal taxpayer-of-record field is uninformative for exempt parcels.
 
 #### Response Structure
 
@@ -221,6 +281,7 @@ Key response properties:
 - `zoning` — Current Chicago zoning classification and details
 - `zoning_history` — Past zoning changes
 - `boundaries` — All Places (wards, community areas, ZIP codes, neighborhoods, etc.) containing the property
+- `chicago_overlay` — For Chicago properties, an object of overlay-district booleans: `predominance_606` (true if in the Predominance of the Block 606 District) and `jackson_park_pilot` (true if in the Jackson Park Pilot Area). Present in both full and limited modes; both default to false outside those districts
 - `train_stations` — CTA/Metra stations within 1 mile
 - `tsl` — Transit-Served Location eligibility and nearby bus routes
 - `aro_2021` — Affordable Requirements Ordinance status
@@ -280,14 +341,28 @@ The `zone_class` lookup is case-insensitive and flexible with formatting
     "parking_min_ratio_tod": 0.5,
     "parking_min_bike_parking_tod": "1 per unit",
     "common_uses": "Small businesses; one apartment above",
-    "max_dwelling_units": null
+    "max_dwelling_units": null,
+    "accessibility_bonus": {
+      "eligible": false,
+      "description": "This district is not eligible for the Connected Communities accessible ground-floor unit bonus (eligible districts are RS-3, RT-3.5, and RT-4).",
+      "code_sections": ["17-2-0303-B", "17-2-0304-D"],
+      "reference_url": "https://help.chicagocityscape.com/connectedcommunities"
+    },
+    "tod_parking": {
+      "code_reduced_min_ratio": 0.5,
+      "minimum_eliminated_in_tsl": true,
+      "note": "parking_min_ratio_tod is the reduced minimum in the zoning code. If the property is a Transit-Served Location, the residential vehicle parking minimum is eliminated entirely (0), not merely reduced.",
+      "reference_url": "https://help.chicagocityscape.com/illinoispeopleoverparkingact"
+    }
   },
   "notes": [
     "Responses are cached for 7 days",
     "All measurements are in feet unless otherwise specified",
     "FAR = Floor Area Ratio",
     "MLA = Minimum Lot Area",
-    "TOD = Transit-Oriented Development"
+    "TOD = Transit-Oriented Development",
+    "accessibility_bonus reflects the Connected Communities accessible ground-floor unit bonus (RS-3, RT-3.5, RT-4)",
+    "parking_min_ratio_tod is the zoning-code reduced minimum; in a Transit-Served Location the minimum is eliminated (0) — see tod_parking"
   ]
 }
 ```
@@ -299,8 +374,10 @@ Key data fields:
 - `max_height` — Building height regulations
 - `setback_front/side/rear` — Required setbacks from property lines
 - `parking_minimum_ratio` — Required parking spaces per unit
-- `parking_min_ratio_tod` — Reduced parking minimum in TOD areas
+- `parking_min_ratio_tod` — Reduced parking minimum in TOD areas (the zoning-code figure; see `tod_parking`)
 - `common_uses` — Typical uses allowed
+- `accessibility_bonus` — Whether the district is eligible for the Connected Communities accessible ground-floor unit bonus (`eligible` boolean, description, code sections, reference URL). Eligible in RS-3, RT-3.5, and RT-4, where an accessible ground-floor unit does not count toward MLA-per-unit or FAR
+- `tod_parking` — Clarifies parking for a Transit-Served Location: `code_reduced_min_ratio` echoes the code figure, but `minimum_eliminated_in_tsl` is `true` because a TSL eliminates the residential vehicle parking minimum entirely (0). Use the Property Report API's `tsl` result to determine whether a specific property is transit-served
 
 #### Error Response
 
@@ -703,9 +780,9 @@ share of the residential-only total.
 ### 8. Search API
 
 Authenticated, rate-limited Typesense search over ~7 million documents in nine
-collections — the same index that powers the site's Command-K search. Full
-OpenAPI reference is served at
-`https://www.chicagocityscape.com/api/search/docs`.
+collections — the same index that powers the site's Command-K search. The
+endpoints, parameters, collections, and filters are documented below and in the
+Knowledge Base Search API article.
 
 **Base path**: `https://www.chicagocityscape.com/api/search`
 
@@ -806,6 +883,60 @@ curl -G "https://www.chicagocityscape.com/api/search/properties" \
 # Discover collections and their fields
 curl -H "Authorization: Bearer YOUR_KEY" \
   "https://www.chicagocityscape.com/api/search/catalog"
+```
+
+---
+
+### 9. Incentives Dictionary API
+
+Returns a plain-language glossary of **every** financial and development incentive
+Chicago Cityscape can detect — grants, tax credits, tax breaks, loans, density
+bonuses, subsidies, and more — each with a definition, its mechanism category, who
+administers it, and who it applies to. This is a **generic reference list, not tied
+to any property**. To find which incentives apply to a *specific* property, use the
+Property Report API with `get_incentives=true` instead.
+
+**Endpoint**: `https://www.chicagocityscape.com/api/incentives.php`
+
+**Caching**: Responses are cached for 7 days.
+
+#### Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `key` | Yes | Your API key |
+| `method` | No | Only `dictionary` is supported (the default) |
+
+#### Response Structure
+
+```json
+{
+  "success": true,
+  "count": 45,
+  "incentives": [
+    {
+      "name": "Chicago TOD",
+      "category": "bonus",
+      "definition": "The Chicago Transit Served Location (TSL, a.k.a. TOD) ordinance reduces parking minimums ...",
+      "administered_by": "City of Chicago Department of Planning & Development (DPD)",
+      "applies_to": "residential, mixed-use",
+      "more_info": [
+        { "name": "Find vacant property near transit stations and lines", "url": "https://help.chicagocityscape.com/todvacantlots" }
+      ]
+    }
+  ],
+  "notes": []
+}
+```
+
+The definitions come from the same source that powers the Property Report's
+Incentives Checker, so they will not drift from what the checker reports. When a
+user asks what an incentive means, prefer these definitions over writing your own.
+
+#### Example Request
+
+```bash
+curl "https://www.chicagocityscape.com/api/incentives.php?key=YOUR_KEY"
 ```
 
 ---
