@@ -59,6 +59,54 @@ boundaries for Chicago and Cook County.
 
 ---
 
+## Before you start: interview the user
+
+Do NOT immediately guess an endpoint and fire a request. This API has eight
+endpoints with very different inputs (single address/PIN vs. a whole place vs. a
+zoning class vs. a full-text search), and picking the wrong one wastes the user's
+rate limit and returns the wrong data. First hold a short interview to understand
+what the user is actually trying to learn, then map their answer to the right
+endpoint(s).
+
+Ask the user the questions below. Ask them conversationally and skip any you can
+already answer from what they have told you — do not interrogate. Aim for one
+focused round of questions, then confirm your plan before making calls.
+
+1. **What is the subject of your research?** Is it:
+   - one specific property (an address or a Cook County PIN),
+   - a geographic area or boundary (a ward, community area, neighborhood, ZIP,
+     or a custom radius/polygon),
+   - a zoning classification (e.g. RS-3, B1-1.5), or
+   - a broad search across many records (permits, sales, properties, names)?
+2. **What do you want to know about it?** e.g. zoning and allowed density,
+   ownership, recent sales, building permits, financial incentives, parcel
+   geometry, transit access, or which data sources power a feature.
+3. **One item or many?** A single lookup, or a bulk pull across an area or a
+   filtered set? (Bulk work points to the Parcels, Search, or Query APIs and may
+   need pagination.)
+4. **What output do you need?** Raw JSON/GeoJSON saved to a file, a cleaned-up
+   table or CSV, a short written summary, a map, or input to further analysis?
+5. **Do you have your API key ready?** Most endpoints require one (see below).
+
+Then map the answers to endpoints:
+
+| The user wants… | Use |
+|---|---|
+| Everything about one address or PIN | Property Report API (`/api/index.php`) |
+| Zoning rules for a zoning class | Zoning API (`/api/zoning.php`) |
+| Parcels within an area / radius / place | Parcels API (`/api/parcels.php`) |
+| A boundary's geometry or metadata | Places API (`/api/places.php`, `/php/api.map.php`) |
+| Full-text search across many records | Search API (`/api/search/{collection}`) |
+| Zoning-class breakdown for a whole place | Zoning Explorer API (`/api/zoningexplorer.php`) |
+| Rows behind a DataTables view on the site | Query API (`/api/query.php`) |
+| Which datasets power a site feature | Sources API (`/api/sources.php`) |
+
+State the endpoint(s) and parameters you intend to call and confirm with the user
+before running anything. For bulk pulls, confirm the expected result size and the
+pagination/limit plan so you do not accidentally issue hundreds of calls.
+
+---
+
 ## Getting an API Key
 
 **API access requires a Real Estate Pro membership.**
