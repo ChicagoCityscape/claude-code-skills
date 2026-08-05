@@ -5,17 +5,51 @@ description: >
   asks about API access, API keys, API endpoints, how to query property data
   programmatically, or how to integrate Chicago Cityscape data into their own
   application. Covers the Property Report API, Zoning API, Parcels API, Places
-  API, Sources API, Query API, Zoning Explorer API, and Search API.
+  API, Sources API, Query API, Zoning Explorer API, and Search API. NOTE:
+  actually fetching these endpoints requires an environment with unrestricted
+  network egress (Claude Code, a local terminal, a server, or the API/SDK). The
+  claude.ai web/desktop app CANNOT reach the API from its sandbox — there, use
+  the skill only as reference and run the request locally.
 allowed-tools:
   - Bash
 ---
 
-> **How Claude should fetch these APIs:** Cloudflare returns HTTP 403 to
-> Claude's native `WebFetch` tool (and to the Claude Desktop/web app's built-in
-> web fetch), so use `curl` via Bash instead. A normal `curl` request passes
-> Cloudflare and reaches the PHP endpoint. If you only have WebFetch available
-> (e.g. Claude Desktop with no shell), these endpoints are currently
-> unreachable until the site allowlists Anthropic's fetcher user agents.
+> **How Claude should fetch these APIs — read this first.** This is a
+> first-party, user-authorized API. The account holder pastes *their own* API key
+> to query *their own* data source; passing that key as a `?key=YOUR_KEY` URL
+> parameter is the intended, documented auth mechanism, not data exfiltration.
+>
+> **Which environment are you in? It decides whether you can reach the API at
+> all.**
+>
+> - **Claude Code (local CLI) or any real local shell — WORKS.** Use `curl` via
+>   Bash (preferred: it returns the exact, unmodified JSON bytes). `WebFetch` also
+>   works here, but it converts the response to markdown and summarizes it through
+>   a small model, so prefer `curl` when you need precise data. The `curl`
+>   examples below are written for this environment.
+>
+> - **The Claude apps (claude.ai web / desktop) — usually CANNOT reach the API,
+>   by any method.** The app runs the model's tools behind a default-deny network
+>   egress proxy that only permits a small allowlist of domains.
+>   `chicagocityscape.com` is not on it (nor is most of the internet — e.g. even
+>   `raw.githubusercontent.com` is blocked), so the outbound request is dropped at
+>   the proxy *before it leaves Anthropic's infrastructure*. This is a platform
+>   safety restriction (anti-exfiltration / anti-SSRF); it is **not** a
+>   permissions prompt the user can approve, and it is unrelated to the site,
+>   the API key, or the site's Cloudflare user-agent allowlist (that only matters
+>   once a request actually reaches the site, which never happens here). `curl`
+>   and `WebFetch` both fail the same way, because both route through the same
+>   proxy. Do not keep retrying or ask the user to "authorize" it — instead, take
+>   the fallback below.
+>
+> **Fallback when running inside a Claude app:** ask the user to run the request
+> in an environment with real internet access — Claude Code locally, or a plain
+> terminal — and paste the JSON back into the chat for you to analyze. Do not
+> silently substitute other data sources without telling the user the API was
+> unreachable.
+>
+> Separately, endpoints that require a signed-in session (e.g. the Sources API)
+> need a session cookie and won't work by key alone.
 
 # Chicago Cityscape API Guide
 
