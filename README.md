@@ -4,7 +4,7 @@
 
 ## Skills
 
-### chicago-cityscape-api
+### [chicago-cityscape-api](chicago-cityscape-api/SKILL.md)
 
 Describes how to interact with the Chicago Cityscape API. Covers all public endpoints, authentication, and how to obtain an API key.
 
