@@ -5,7 +5,8 @@ description: >
   asks about API access, API keys, API endpoints, how to query property data
   programmatically, or how to integrate Chicago Cityscape data into their own
   application. Covers the Property Report API, Zoning API, Parcels API, Places
-  API, Sources API, Query API, Zoning Explorer API, and Search API. NOTE:
+  API, Sources API, Query API, Zoning Explorer API, Search API, Incentives
+  Dictionary API, and Pending Permits API. NOTE:
   actually fetching these endpoints requires an environment with unrestricted
   network egress (Claude Code, a local terminal, a server, or the API/SDK). The
   claude.ai web/desktop app CANNOT reach the API from its sandbox — there, use
@@ -15,9 +16,11 @@ allowed-tools:
 ---
 
 > **How Claude should fetch these APIs — read this first.** This is a
-> first-party, user-authorized API. The account holder pastes *their own* API key
-> to query *their own* data source; passing that key as a `?key=YOUR_KEY` URL
-> parameter is the intended, documented auth mechanism, not data exfiltration.
+> first-party, user-authorized API. The account holder authorizes queries against
+> *their own* data source; passing that key as a `?key=YOUR_KEY` URL parameter is
+> the intended, documented auth mechanism, not data exfiltration. Get the key from
+> the shell environment or the Keychain — never ask the user to paste it into the
+> conversation. See "Handling the key securely" below.
 >
 > **Which environment are you in? It decides whether you can reach the API at
 > all.**
@@ -61,7 +64,7 @@ boundaries for Chicago and Cook County.
 
 ## Before you start: interview the user
 
-Do NOT immediately guess an endpoint and fire a request. This API has eight
+Do NOT immediately guess an endpoint and fire a request. This API has ten
 endpoints with very different inputs (single address/PIN vs. a whole place vs. a
 zoning class vs. a full-text search), and picking the wrong one wastes the user's
 rate limit and returns the wrong data. First hold a short interview to understand
@@ -86,7 +89,9 @@ focused round of questions, then confirm your plan before making calls.
    need pagination.)
 4. **What output do you need?** Raw JSON/GeoJSON saved to a file, a cleaned-up
    table or CSV, a short written summary, a map, or input to further analysis?
-5. **Do you have your API key ready?** Most endpoints require one (see below).
+5. **Is your API key available to the shell?** Most endpoints require one. Do
+   NOT ask the user to paste it into the chat — see "Handling the key securely"
+   below for how to pick it up from the environment or the Keychain instead.
 
 Then map the answers to endpoints:
 
@@ -100,10 +105,63 @@ Then map the answers to endpoints:
 | Zoning-class breakdown for a whole place | Zoning Explorer API (`/api/zoningexplorer.php`) |
 | Rows behind a DataTables view on the site | Query API (`/api/query.php`) |
 | Which datasets power a site feature | Sources API (`/api/sources.php`) |
+| Definitions of the incentive programs | Incentives Dictionary API (`/api/incentives.php`) |
+| Permit applications filed but not yet issued | Pending Permits API (`/api/pendingpermits.php`) |
 
 State the endpoint(s) and parameters you intend to call and confirm with the user
 before running anything. For bulk pulls, confirm the expected result size and the
 pagination/limit plan so you do not accidentally issue hundreds of calls.
+
+---
+
+## Guidance when advising the user on results
+
+When you interpret API results and make recommendations, follow these rules:
+
+- **Never state a property attribute the API did not actually return.** Only
+  describe facts that appear in the response. In particular, the API does NOT tell
+  you whether a parcel is a **corner lot**, an interior/through lot, its
+  orientation, frontage, or shape — so never call a property a "corner lot" (or
+  assert its dimensions, frontage, or orientation) unless a field in the response
+  explicitly says so. If such a detail matters to the analysis, tell the user it
+  is not in the data and would need to be confirmed from a plat, survey, or aerial
+  image. Treat lot area (`area_sqft`), zoning, PIN, and address as the reliable
+  facts; do not embellish beyond them.
+
+- **Do not recommend assemblage (combining lots) unless the properties are
+  actually adjacent and abutting.** Only suggest assembling parcels when you have
+  verified from the data (shared boundaries / touching geometries, or consecutive
+  PINs on the same block face) that the lots physically abut one another. Do not
+  suggest assembling parcels that merely happen to be nearby, in the same
+  neighborhood, or owned by the same party.
+- **Even when parcels do abut, do not provide instructions on how to carry out an
+  assemblage** (e.g. how to negotiate, acquire, legally combine, or re-subdivide
+  the lots). You may note that the abutting parcels *could* be considered together;
+  leave the how-to to the user's own attorneys and advisors.
+- **When a property has incentives, offer to explain what each one means.** If you
+  requested `get_incentives=true` and the response lists incentives that apply to
+  the property, do not just name them — ask the user whether they would also like
+  to learn what each incentive means. If they say yes, summarize each applicable
+  incentive using the descriptive text carried in the `incentives` array items
+  (each item includes a name and human-readable description). Do not invent
+  eligibility rules or dollar figures that are not in the response. For generic
+  definitions of any incentive (not tied to a property), use the Incentives
+  Dictionary API (`/api/incentives.php`) rather than writing definitions from
+  memory.
+- **Transit-Served Location parking: the minimum is eliminated, not "0.5/unit".**
+  The Zoning API's `parking_min_ratio_tod` value (often 0.5) is only the reduced
+  minimum written in the zoning code — it is NOT the operative requirement for a
+  property that qualifies as a Transit-Served Location (TSL). When the Property
+  Report API returns `tsl.likely_eligible = true` (or a parcel is flagged
+  transit-served / `tsl_eligible: true`), state that the residential vehicle
+  **parking minimum is eliminated (0 required)**, not reduced to 0.5. This is
+  because Chicago's Connected Communities / Transit-Served Location ordinance has
+  applied in all zoning districts since September 25, 2025, and the Illinois
+  People Over Parking Act (effective June 1, 2026) eliminates minimum parking in
+  qualifying locations statewide — both override the code's 0.5 figure. Never
+  present `0.5/unit` as the required minimum for a transit-served property; cite it
+  only as the pre-waiver zoning-code number if it is relevant. The Zoning API's
+  `tod_parking` object carries this same caveat.
 
 ---
 
@@ -137,6 +195,120 @@ Requests without a valid key return:
 ```json
 { "error": ["Key not provided"] }
 ```
+
+Every `YOUR_KEY` in the examples below is a placeholder. Do not ask the user to
+paste the real key in its place — read the next section first and substitute a
+shell reference such as `"$CITYSCAPE_API_KEY"` instead.
+
+---
+
+## Handling the key securely (read this before asking for a key)
+
+**Rule for the agent: never ask the user to type or paste their API key into the
+conversation, and never print it.** A key pasted into chat is in the transcript
+for good; it can be scrolled back to, exported, or included in a bug report. It
+is also completely unnecessary — the shell you run commands in can read the key
+itself, so you can make authenticated calls without the key ever entering your
+context.
+
+### What to do, in order
+
+1. **Check whether the key is already in the environment.** Run a test that
+   reveals only presence, never the value:
+
+   ```bash
+   [ -n "$CITYSCAPE_API_KEY" ] && echo "key is set" || echo "key is NOT set"
+   ```
+
+   If it is set, just use `"$CITYSCAPE_API_KEY"` in your requests and move on.
+
+2. **If it is not set, ask the user to provide it out-of-band** — that is,
+   through the shell or a file rather than through the chat. Any of these works;
+   pick the one that fits the user's setup:
+
+   **a. An exported shell variable** (macOS, Linux, WSL). The user adds this line
+   to `~/.zshrc` (or `~/.bashrc`) *in an editor* — not with `echo >>`, which would
+   put the key in their shell history — and opens a new terminal before starting
+   the agent:
+
+   ```bash
+   export CITYSCAPE_API_KEY="their-key-here"
+   ```
+
+   Claude Code starts its shell from the user's profile, so the variable is
+   available to every Bash call without you ever seeing the value:
+
+   ```bash
+   curl -sG "https://chicagocityscape.com/api/index.php" \
+     --data-urlencode "pin=17104000210000" \
+     --data-urlencode "key=$CITYSCAPE_API_KEY"
+   ```
+
+   **b. A `.env` file the agent is forbidden to read.** Put the key in `.env`,
+   add `.env` to `.gitignore`, and add a deny rule in `.claude/settings.json` so
+   the file cannot be opened even by accident:
+
+   ```json
+   {
+     "permissions": {
+       "deny": ["Read(./.env)", "Bash(cat .env:*)"]
+     }
+   }
+   ```
+
+   Then load it into the environment inside the same command that uses it:
+
+   ```bash
+   set -a; . ./.env; set +a
+   curl -sG "https://chicagocityscape.com/api/index.php" \
+     --data-urlencode "pin=17104000210000" \
+     --data-urlencode "key=$CITYSCAPE_API_KEY"
+   ```
+
+   **c. The macOS Keychain**, if the user is on a Mac — the key is then never
+   written to a file at all. (Linux users can do the same with `secret-tool`.)
+   The user runs this once, in their own terminal, and pastes the key at the
+   prompt (`-w` must be the last flag for it to prompt; the key does not echo and
+   does not land in shell history):
+
+   ```bash
+   security add-generic-password -a "$USER" -s cityscape-api -w
+   ```
+
+   You then read it inline, per call:
+
+   ```bash
+   curl -sG "https://chicagocityscape.com/api/index.php" \
+     --data-urlencode "pin=17104000210000" \
+     --data-urlencode "key=$(security find-generic-password -s cityscape-api -w)"
+   ```
+
+   macOS may show a one-time "allow access" dialog the first time an item is
+   read; the user clicks Always Allow and it does not ask again.
+
+3. **Keep it out of your output for the rest of the session:**
+   - Never run `echo "$CITYSCAPE_API_KEY"`, `env`, `printenv`, or `set` in a way
+     that prints the value, and never `cat` the `.env` file.
+   - Never use `curl -v` / `--trace` on an authenticated call: verbose mode
+     prints the full request line, key included.
+   - When a call fails, report the HTTP status and the response body, not the
+     command's expanded URL.
+   - Do not write the key into a script, a notebook, a commit, or a saved file
+     the user did not ask for.
+
+4. **If the user pastes the key into the chat anyway,** say so plainly and tell
+   them to rotate it at `https://chicagocityscape.com/account.php?page=apikeys`
+   (the "Rotate API key" button invalidates the old key immediately). Then set up
+   one of the methods above for the new key.
+
+### Two notes on where keys leak
+
+- **`?key=` lands in server access logs.** For the Search API, prefer the header
+  form — `-H "Authorization: Bearer $CITYSCAPE_API_KEY"` — which keeps the key out
+  of the URL. Other endpoints accept the query parameter only.
+- **An expanded command line is visible to other local processes** (`ps`). That
+  matters only on a shared machine; where it does, a secret store (2c) keeps the
+  value out of the command entirely.
 
 ---
 
@@ -176,6 +348,14 @@ These parameters add data to the response but increase response time:
 | `get_characteristics=true` | Physical characteristics from Cook County Assessor | Requires PIN |
 | `get_sales=true` | Property sales from PTAX records | Requires PIN; Illinois only |
 | `get_recordings=true` | Property recordings data | Requires PIN; Cook County only |
+| `get_lot_dimensions=true` | Number of sides of the lot and the length of each, in feet | Requires a resolved parcel |
+| `get_exempt_owner=true` | Owner/steward of an exempt or publicly-held parcel, matched from the Assessor exempt-properties list, the City owned-land inventory, and the CCLBA inventory | Requires PIN; Cook County only. Most useful when the parcel's property class is `EX`. Adds an `exempt_owner` object |
+| `get_streetview=true` | URL of the cached Google Street View image (served from DO Spaces) | Adds a `street_view_image_url` property. Returns `null` unless the image was already generated — this never triggers a new (paid) Street View fetch |
+
+The `exempt_owner` object has three keys — `assessor_exempt`, `chicago_owned_land`,
+and `cclba` — each holding the matched record or `null` when the PIN is absent from
+that source. When a property's class is `EX`, offer the user this lookup, since the
+normal taxpayer-of-record field is uninformative for exempt parcels.
 
 #### Response Structure
 
@@ -221,6 +401,7 @@ Key response properties:
 - `zoning` — Current Chicago zoning classification and details
 - `zoning_history` — Past zoning changes
 - `boundaries` — All Places (wards, community areas, ZIP codes, neighborhoods, etc.) containing the property
+- `chicago_overlay` — For Chicago properties, an object of overlay-district booleans: `predominance_606` (true if in the Predominance of the Block 606 District) and `jackson_park_pilot` (true if in the Jackson Park Pilot Area). Present in both full and limited modes; both default to false outside those districts
 - `train_stations` — CTA/Metra stations within 1 mile
 - `tsl` — Transit-Served Location eligibility and nearby bus routes
 - `aro_2021` — Affordable Requirements Ordinance status
@@ -280,14 +461,28 @@ The `zone_class` lookup is case-insensitive and flexible with formatting
     "parking_min_ratio_tod": 0.5,
     "parking_min_bike_parking_tod": "1 per unit",
     "common_uses": "Small businesses; one apartment above",
-    "max_dwelling_units": null
+    "max_dwelling_units": null,
+    "accessibility_bonus": {
+      "eligible": false,
+      "description": "This district is not eligible for the Connected Communities accessible ground-floor unit bonus (eligible districts are RS-3, RT-3.5, and RT-4).",
+      "code_sections": ["17-2-0303-B", "17-2-0304-D"],
+      "reference_url": "https://help.chicagocityscape.com/connectedcommunities"
+    },
+    "tod_parking": {
+      "code_reduced_min_ratio": 0.5,
+      "minimum_eliminated_in_tsl": true,
+      "note": "parking_min_ratio_tod is the reduced minimum in the zoning code. If the property is a Transit-Served Location, the residential vehicle parking minimum is eliminated entirely (0), not merely reduced.",
+      "reference_url": "https://help.chicagocityscape.com/illinoispeopleoverparkingact"
+    }
   },
   "notes": [
     "Responses are cached for 7 days",
     "All measurements are in feet unless otherwise specified",
     "FAR = Floor Area Ratio",
     "MLA = Minimum Lot Area",
-    "TOD = Transit-Oriented Development"
+    "TOD = Transit-Oriented Development",
+    "accessibility_bonus reflects the Connected Communities accessible ground-floor unit bonus (RS-3, RT-3.5, RT-4)",
+    "parking_min_ratio_tod is the zoning-code reduced minimum; in a Transit-Served Location the minimum is eliminated (0) — see tod_parking"
   ]
 }
 ```
@@ -299,8 +494,10 @@ Key data fields:
 - `max_height` — Building height regulations
 - `setback_front/side/rear` — Required setbacks from property lines
 - `parking_minimum_ratio` — Required parking spaces per unit
-- `parking_min_ratio_tod` — Reduced parking minimum in TOD areas
+- `parking_min_ratio_tod` — Reduced parking minimum in TOD areas (the zoning-code figure; see `tod_parking`)
 - `common_uses` — Typical uses allowed
+- `accessibility_bonus` — Whether the district is eligible for the Connected Communities accessible ground-floor unit bonus (`eligible` boolean, description, code sections, reference URL). Eligible in RS-3, RT-3.5, and RT-4, where an accessible ground-floor unit does not count toward MLA-per-unit or FAR
+- `tod_parking` — Clarifies parking for a Transit-Served Location: `code_reduced_min_ratio` echoes the code figure, but `minimum_eliminated_in_tsl` is `true` because a TSL eliminates the residential vehicle parking minimum entirely (0). Use the Property Report API's `tsl` result to determine whether a specific property is transit-served
 
 #### Error Response
 
@@ -703,8 +900,9 @@ share of the residential-only total.
 ### 8. Search API
 
 Authenticated, rate-limited Typesense search over ~7 million documents in nine
-collections — the same index that powers the site's Command-K search. Full
-OpenAPI reference is served at
+collections — the same index that powers the site's Command-K search. The
+endpoints, parameters, collections, and filters are documented below and in the
+Knowledge Base Search API article. A full OpenAPI reference is served at
 `https://www.chicagocityscape.com/api/search/docs`.
 
 **Base path**: `https://www.chicagocityscape.com/api/search`
@@ -809,6 +1007,146 @@ curl -H "Authorization: Bearer YOUR_KEY" \
 ```
 
 ---
+
+### 9. Incentives Dictionary API
+
+Returns a plain-language glossary of **every** financial and development incentive
+Chicago Cityscape can detect — grants, tax credits, tax breaks, loans, density
+bonuses, subsidies, and more — each with a definition, its mechanism category, who
+administers it, and who it applies to. This is a **generic reference list, not tied
+to any property**. To find which incentives apply to a *specific* property, use the
+Property Report API with `get_incentives=true` instead.
+
+**Endpoint**: `https://www.chicagocityscape.com/api/incentives.php`
+
+**Caching**: Responses are cached for 7 days.
+
+#### Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `key` | Yes | Your API key |
+| `method` | No | Only `dictionary` is supported (the default) |
+
+#### Response Structure
+
+```json
+{
+  "success": true,
+  "count": 45,
+  "incentives": [
+    {
+      "name": "Chicago TOD",
+      "category": "bonus",
+      "definition": "The Chicago Transit Served Location (TSL, a.k.a. TOD) ordinance reduces parking minimums ...",
+      "administered_by": "City of Chicago Department of Planning & Development (DPD)",
+      "applies_to": "residential, mixed-use",
+      "more_info": [
+        { "name": "Find vacant property near transit stations and lines", "url": "https://help.chicagocityscape.com/todvacantlots" }
+      ]
+    }
+  ],
+  "notes": []
+}
+```
+
+The definitions come from the same source that powers the Property Report's
+Incentives Checker, so they will not drift from what the checker reports. When a
+user asks what an incentive means, prefer these definitions over writing your own.
+
+#### Example Request
+
+```bash
+curl "https://www.chicagocityscape.com/api/incentives.php?key=YOUR_KEY"
+```
+
+---
+
+### 10. Pending Permits API
+
+Returns Chicago building permit **applications** — by default the ones the Department
+of Buildings has received but has **not yet issued**. This is the counterpart to the
+permits you get from the Property Report API, which are already issued. Use this to
+answer "what is being filed" rather than "what was approved".
+
+The data is scraped hourly from the Department of Buildings permit search site. It is
+not an official City feed, so treat counts as close but not authoritative.
+
+**Endpoint**: `https://www.chicagocityscape.com/api/pendingpermits.php`
+
+**Access**: Included with API Access; not sold separately.
+
+#### Start with the catalog, always
+
+Call this before writing any query:
+
+```bash
+curl -H "Authorization: Bearer $CITYSCAPE_API_KEY" \
+  "https://www.chicagocityscape.com/api/pendingpermits.php?method=catalog"
+```
+
+The catalog returns the valid statuses and sort values, the caller's limits, and the
+live `permit_type` and `review_type` vocabularies with a count for each. Those
+vocabularies come from the data, so they stay correct when the City adds a category.
+Read them from the catalog rather than hardcoding — `permit_type` and `review_type`
+are validated, and an unrecognized value returns a 400 with the valid list attached.
+
+#### Parameters
+
+All are optional. With none, you get the 100 most recent open applications.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `status` | string | `open` | `open`, `issued`, `withdrawn`, or `all`. `open` means no issue date and no withdrawal date. |
+| `date_from`, `date_to` | date | | By application date. `YYYY-MM-DD` or full ISO 8601. |
+| `updated_since` | date | | Record changed on or after this date — use for incremental syncing |
+| `first_seen_since` | date | | First observed by Chicago Cityscape on or after this date — use to find newly filed applications |
+| `permit_type` | string | | Comma-separated; validated against the catalog |
+| `review_type` | string | | Comma-separated; validated against the catalog |
+| `property_class` | string | | Comma-separated Cook County class codes; not validated |
+| `q` | string | | Free-text search of the work description; 3 character minimum |
+| `contractor`, `owner` | string | | Partial, case-insensitive name match |
+| `has_applicants` | boolean | | Whether the application carries applicant records |
+| `lat`, `lng` | float | | WGS84 coordinate; supply both |
+| `radius` | integer | 1320 | Feet, when used with `lat`/`lng`. Maximum 15,840 (3 miles). |
+| `bounds_geojson` | GeoJSON | | URL-encoded geometry to intersect |
+| `slug` | string | | A Place slug such as `ward-1`. Add `radius` to search near the boundary instead of inside it. |
+| `has_location` | boolean | | Whether the application could be mapped |
+| `format` | string | `json` | `json` or `geojson` |
+| `limit` | integer | 100 | 1 to 500 |
+| `offset` | integer | 0 | Maximum 50,000 |
+| `sort` | string | `date_sorting` | See the catalog for valid values |
+| `order` | string | `desc` | `asc` or `desc` |
+| `include_total` | boolean | false | Adds `total_count` to `meta`; costs a second query, so leave it off while paging |
+| `include_reviews` | boolean | false | Adds the City plan-review stage array to each row |
+| `include_renderings` | boolean | false | Adds attached files (renderings, plans) to each row |
+
+Any spatial filter implies `has_location=true`, since a permit with no geometry cannot
+be inside anything. Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, or `y`/`n`.
+
+#### Things that will bite you
+
+- **A blank review type is a real value.** Several hundred open applications have one.
+  It cannot be typed into a query string, so there is no way to filter for it; the
+  catalog reports its count so the totals reconcile.
+- **Personal Place slugs fail open.** If the caller passes a Personal Place slug their
+  account does not own, the filter is silently dropped and a note is added to the
+  response rather than the request failing — so the response never reveals whether
+  someone else's private Place exists. Check `meta` for notes before trusting a count.
+- **The largest projects use Direct Developer Services**, a review type with certified
+  third-party reviewers. Filter on it to find big projects.
+
+#### Example Requests
+
+```bash
+# What new construction is pending in Ward 1?
+curl -H "Authorization: Bearer $CITYSCAPE_API_KEY" \
+  "https://www.chicagocityscape.com/api/pendingpermits.php?permit_type=New%20Construction&slug=ward-1"
+
+# Newly filed applications since a date, for a watchlist that re-runs
+curl -H "Authorization: Bearer $CITYSCAPE_API_KEY" \
+  "https://www.chicagocityscape.com/api/pendingpermits.php?first_seen_since=2026-09-01&include_total=true"
+```
 
 ## Response Headers
 
