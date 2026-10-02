@@ -13,5 +13,7 @@
   "icon": "./.claude-plugin/icon.png",
   "documentationUrl": "https://github.com/ChicagoCityscape/claude-code-skills#readme",
   "privacyPolicyUrl": "https://help.chicagocityscape.com/privacypolicy",
+  "termsOfServiceUrl": "https://help.chicagocityscape.com/usageguidelines",
+  "supportUrl": "https://www.chicagocityscape.com/contact.php",
   "keywords": ["chicago", "real-estate", "zoning", "property", "gis", "permits", "cook-county"]
 }
