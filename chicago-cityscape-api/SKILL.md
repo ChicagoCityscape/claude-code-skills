@@ -5,8 +5,8 @@ description: >
   asks about API access, API keys, API endpoints, how to query property data
   programmatically, or how to integrate Chicago Cityscape data into their own
   application. Covers the Property Report API, Zoning API, Parcels API, Places
-  API, Sources API, Query API, Zoning Explorer API, Search API, and Incentives
-  Dictionary API. NOTE:
+  API, Sources API, Query API, Zoning Explorer API, Search API, Incentives
+  Dictionary API, and Pending Permits API. NOTE:
   actually fetching these endpoints requires an environment with unrestricted
   network egress (Claude Code, a local terminal, a server, or the API/SDK). The
   claude.ai web/desktop app CANNOT reach the API from its sandbox — there, use
@@ -64,7 +64,7 @@ boundaries for Chicago and Cook County.
 
 ## Before you start: interview the user
 
-Do NOT immediately guess an endpoint and fire a request. This API has eight
+Do NOT immediately guess an endpoint and fire a request. This API has ten
 endpoints with very different inputs (single address/PIN vs. a whole place vs. a
 zoning class vs. a full-text search), and picking the wrong one wastes the user's
 rate limit and returns the wrong data. First hold a short interview to understand
@@ -106,6 +106,7 @@ Then map the answers to endpoints:
 | Rows behind a DataTables view on the site | Query API (`/api/query.php`) |
 | Which datasets power a site feature | Sources API (`/api/sources.php`) |
 | Definitions of the incentive programs | Incentives Dictionary API (`/api/incentives.php`) |
+| Permit applications filed but not yet issued | Pending Permits API (`/api/pendingpermits.php`) |
 
 State the endpoint(s) and parameters you intend to call and confirm with the user
 before running anything. For bulk pulls, confirm the expected result size and the
@@ -347,6 +348,7 @@ These parameters add data to the response but increase response time:
 | `get_characteristics=true` | Physical characteristics from Cook County Assessor | Requires PIN |
 | `get_sales=true` | Property sales from PTAX records | Requires PIN; Illinois only |
 | `get_recordings=true` | Property recordings data | Requires PIN; Cook County only |
+| `get_lot_dimensions=true` | Number of sides of the lot and the length of each, in feet | Requires a resolved parcel |
 | `get_exempt_owner=true` | Owner/steward of an exempt or publicly-held parcel, matched from the Assessor exempt-properties list, the City owned-land inventory, and the CCLBA inventory | Requires PIN; Cook County only. Most useful when the parcel's property class is `EX`. Adds an `exempt_owner` object |
 | `get_streetview=true` | URL of the cached Google Street View image (served from DO Spaces) | Adds a `street_view_image_url` property. Returns `null` unless the image was already generated — this never triggers a new (paid) Street View fetch |
 
@@ -900,7 +902,8 @@ share of the residential-only total.
 Authenticated, rate-limited Typesense search over ~7 million documents in nine
 collections — the same index that powers the site's Command-K search. The
 endpoints, parameters, collections, and filters are documented below and in the
-Knowledge Base Search API article.
+Knowledge Base Search API article. A full OpenAPI reference is served at
+`https://www.chicagocityscape.com/api/search/docs`.
 
 **Base path**: `https://www.chicagocityscape.com/api/search`
 
@@ -1058,6 +1061,92 @@ curl "https://www.chicagocityscape.com/api/incentives.php?key=YOUR_KEY"
 ```
 
 ---
+
+### 10. Pending Permits API
+
+Returns Chicago building permit **applications** — by default the ones the Department
+of Buildings has received but has **not yet issued**. This is the counterpart to the
+permits you get from the Property Report API, which are already issued. Use this to
+answer "what is being filed" rather than "what was approved".
+
+The data is scraped hourly from the Department of Buildings permit search site. It is
+not an official City feed, so treat counts as close but not authoritative.
+
+**Endpoint**: `https://www.chicagocityscape.com/api/pendingpermits.php`
+
+**Access**: Included with API Access; not sold separately.
+
+#### Start with the catalog, always
+
+Call this before writing any query:
+
+```bash
+curl -H "Authorization: Bearer $CITYSCAPE_API_KEY" \
+  "https://www.chicagocityscape.com/api/pendingpermits.php?method=catalog"
+```
+
+The catalog returns the valid statuses and sort values, the caller's limits, and the
+live `permit_type` and `review_type` vocabularies with a count for each. Those
+vocabularies come from the data, so they stay correct when the City adds a category.
+Read them from the catalog rather than hardcoding — `permit_type` and `review_type`
+are validated, and an unrecognized value returns a 400 with the valid list attached.
+
+#### Parameters
+
+All are optional. With none, you get the 100 most recent open applications.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `status` | string | `open` | `open`, `issued`, `withdrawn`, or `all`. `open` means no issue date and no withdrawal date. |
+| `date_from`, `date_to` | date | | By application date. `YYYY-MM-DD` or full ISO 8601. |
+| `updated_since` | date | | Record changed on or after this date — use for incremental syncing |
+| `first_seen_since` | date | | First observed by Chicago Cityscape on or after this date — use to find newly filed applications |
+| `permit_type` | string | | Comma-separated; validated against the catalog |
+| `review_type` | string | | Comma-separated; validated against the catalog |
+| `property_class` | string | | Comma-separated Cook County class codes; not validated |
+| `q` | string | | Free-text search of the work description; 3 character minimum |
+| `contractor`, `owner` | string | | Partial, case-insensitive name match |
+| `has_applicants` | boolean | | Whether the application carries applicant records |
+| `lat`, `lng` | float | | WGS84 coordinate; supply both |
+| `radius` | integer | 1320 | Feet, when used with `lat`/`lng`. Maximum 15,840 (3 miles). |
+| `bounds_geojson` | GeoJSON | | URL-encoded geometry to intersect |
+| `slug` | string | | A Place slug such as `ward-1`. Add `radius` to search near the boundary instead of inside it. |
+| `has_location` | boolean | | Whether the application could be mapped |
+| `format` | string | `json` | `json` or `geojson` |
+| `limit` | integer | 100 | 1 to 500 |
+| `offset` | integer | 0 | Maximum 50,000 |
+| `sort` | string | `date_sorting` | See the catalog for valid values |
+| `order` | string | `desc` | `asc` or `desc` |
+| `include_total` | boolean | false | Adds `total_count` to `meta`; costs a second query, so leave it off while paging |
+| `include_reviews` | boolean | false | Adds the City plan-review stage array to each row |
+| `include_renderings` | boolean | false | Adds attached files (renderings, plans) to each row |
+
+Any spatial filter implies `has_location=true`, since a permit with no geometry cannot
+be inside anything. Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, or `y`/`n`.
+
+#### Things that will bite you
+
+- **A blank review type is a real value.** Several hundred open applications have one.
+  It cannot be typed into a query string, so there is no way to filter for it; the
+  catalog reports its count so the totals reconcile.
+- **Personal Place slugs fail open.** If the caller passes a Personal Place slug their
+  account does not own, the filter is silently dropped and a note is added to the
+  response rather than the request failing — so the response never reveals whether
+  someone else's private Place exists. Check `meta` for notes before trusting a count.
+- **The largest projects use Direct Developer Services**, a review type with certified
+  third-party reviewers. Filter on it to find big projects.
+
+#### Example Requests
+
+```bash
+# What new construction is pending in Ward 1?
+curl -H "Authorization: Bearer $CITYSCAPE_API_KEY" \
+  "https://www.chicagocityscape.com/api/pendingpermits.php?permit_type=New%20Construction&slug=ward-1"
+
+# Newly filed applications since a date, for a watchlist that re-runs
+curl -H "Authorization: Bearer $CITYSCAPE_API_KEY" \
+  "https://www.chicagocityscape.com/api/pendingpermits.php?first_seen_since=2026-09-01&include_total=true"
+```
 
 ## Response Headers
 
