@@ -11,8 +11,6 @@ description: >
   network egress (Claude Code, a local terminal, a server, or the API/SDK). The
   claude.ai web/desktop app CANNOT reach the API from its sandbox — there, use
   the skill only as reference and run the request locally.
-allowed-tools:
-  - Bash
 ---
 
 > **How Claude should fetch these APIs — read this first.** The user's Chicago

@@ -10,5 +10,8 @@
   "homepage": "https://www.chicagocityscape.com",
   "repository": "https://github.com/ChicagoCityscape/claude-code-skills",
   "license": "MIT",
+  "icon": "./.claude-plugin/icon.png",
+  "documentationUrl": "https://help.chicagocityscape.com/api",
+  "privacyPolicyUrl": "https://help.chicagocityscape.com/privacypolicy",
   "keywords": ["chicago", "real-estate", "zoning", "property", "gis", "permits", "cook-county"]
 }
