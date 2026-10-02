@@ -1,0 +1,14 @@
+{
+  "name": "chicago-cityscape",
+  "displayName": "Chicago Cityscape",
+  "version": "1.0.0",
+  "description": "Query Chicago Cityscape's property, zoning, parcel, permit, and place APIs for Chicago and Cook County real estate research.",
+  "author": {
+    "name": "Chicago Cityscape",
+    "url": "https://www.chicagocityscape.com"
+  },
+  "homepage": "https://www.chicagocityscape.com",
+  "repository": "https://github.com/ChicagoCityscape/claude-code-skills",
+  "license": "MIT",
+  "keywords": ["chicago", "real-estate", "zoning", "property", "gis", "permits", "cook-county"]
+}

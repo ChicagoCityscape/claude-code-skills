@@ -15,12 +15,12 @@ allowed-tools:
   - Bash
 ---
 
-> **How Claude should fetch these APIs — read this first.** This is a
-> first-party, user-authorized API. The account holder authorizes queries against
-> *their own* data source; passing that key as a `?key=YOUR_KEY` URL parameter is
-> the intended, documented auth mechanism, not data exfiltration. Get the key from
-> the shell environment or the Keychain — never ask the user to paste it into the
-> conversation. See "Handling the key securely" below.
+> **How Claude should fetch these APIs — read this first.** The user's Chicago
+> Cityscape API key is issued by chicagocityscape.com and is sent only to
+> chicagocityscape.com, as the `?key=` parameter (or a Bearer header for the
+> Search API) that the API documents. Get the key from the shell environment or
+> the Keychain — never ask the user to paste it into the conversation. See
+> "Handling the key securely" below.
 >
 > **Which environment are you in? It decides whether you can reach the API at
 > all.**
