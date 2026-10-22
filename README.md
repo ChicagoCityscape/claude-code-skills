@@ -1,43 +1,43 @@
 # Chicago Cityscape plugin for Claude
 
-A Claude plugin for researching real estate with [Chicago Cityscape](https://www.chicagocityscape.com). It adds the Chicago Cityscape connector, so Claude can read Property Reports for any property in 13 counties in Illinois, Indiana and Wisconsin, and a skill that teaches Claude the Chicago Cityscape APIs: property reports, zoning rules, parcel boundaries, building permits, pending permits, financial incentives, and place boundaries such as wards and community areas.
+A Claude plugin that adds the [Chicago Cityscape](https://www.chicagocityscape.com) connector, so Claude can read Property Reports for any property in 13 counties in Illinois, Indiana and Wisconsin: zoning and the uses it allows, property class and building characteristics, property taxes, building permits, violations, sales, ownership, development incentives and nearby transit.
+
+Want Claude Code to call the Chicago Cityscape APIs directly with your API key? Use the **Chicago Cityscape API** plugin instead. Its source is [ChicagoCityscape/claude-code-api-skill](https://github.com/ChicagoCityscape/claude-code-api-skill).
 
 ## What's included
 
 ### Connector: Chicago Cityscape (MCP server)
 
-A remote MCP server at `https://www.chicagocityscape.com/mcp`. You sign in once with your Chicago Cityscape account. Claude can then look up a property by address or PIN and read its Property Report (zoning, property class, taxes, permits, violations, sales, ownership, incentives and transit), compare up to 30 properties, list your My Faves and My Notes, and add a property to My Faves when you ask. It works in claude.ai, the desktop app, Cowork and Claude Code. How much of each report you see depends on your membership.
+A remote MCP server at `https://www.chicagocityscape.com/mcp`. You sign in once with your Chicago Cityscape account. Claude can then:
 
-### Skill: chicago-cityscape-api
+- look up a property by address or PIN and read its Property Report, then ask for one part in depth: every incentive, the uses the zoning allows, a map, a building permit, or (Cook County) assessment appeals and property tax exemptions
+- read up to 5 Property Reports in one request
+- compare up to 30 properties by location, lot size and zoning
+- list the properties in your My Faves and My Notes
+- add a property to My Faves when you ask
 
-Documents all ten public Chicago Cityscape API endpoints: Property Report, Zoning, Parcels, Places, Sources, Query, Zoning Explorer, Search, Incentives Dictionary, and Pending Permits. Before calling anything, Claude asks a few short questions about what you are researching, then picks the right endpoint.
+It works in claude.ai, the desktop app, Cowork and Claude Code. How much of each report you see depends on your membership.
 
-**Triggers on**: questions about API access, API keys, API endpoints, querying property data programmatically, or integrating Chicago Cityscape data into an application. You can also invoke it directly with `/chicago-cityscape-api`.
+Counties covered: Cook, Lake, DuPage, Will, Kane, Kendall, McHenry, Peoria, Sangamon and Winnebago in Illinois; Lake in Indiana; Milwaukee and Dane in Wisconsin.
 
 ## Requirements
 
-- **For the connector:** a Chicago Cityscape account. Sign up at [chicagocityscape.com](https://www.chicagocityscape.com).
-- **For the API skill:** a Chicago Cityscape API key ([chicagocityscape.com/account.php?page=apikeys](https://chicagocityscape.com/account.php?page=apikeys)) and an environment with open internet access, such as Claude Code or a local terminal. The claude.ai web and desktop apps run tools behind a network allowlist that does not include chicagocityscape.com. There, Claude uses the connector for property lookups and the skill as reference only.
+A Chicago Cityscape account. Sign up at [chicagocityscape.com](https://www.chicagocityscape.com). No API key is needed.
 
 ## What this plugin runs, sends, and fetches
 
-- **Runs**: `curl` commands through the Bash tool, which Claude Code asks you to approve.
-- **Sends**: requests only to `https://chicagocityscape.com` (and `www.chicagocityscape.com`). API requests carry your query parameters (an address, PIN, place, zoning class, or search term) and your Chicago Cityscape API key. Connector requests go to `https://www.chicagocityscape.com/mcp` with the tool's arguments (an address, PIN or county) and an OAuth token from your sign-in; the connector never sees your password or payment details.
-- **Where the key comes from**: the skill tells Claude never to ask you to paste the key into the chat. Claude reads it from the `CITYSCAPE_API_KEY` environment variable, from a `.env` file loaded inside the same command, or from the macOS Keychain (item `cityscape-api`), and never prints it. The key goes only to chicagocityscape.com, the service that issued it.
-- **Stores**: nothing locally. The plugin has no hooks or background processes, and saves no data outside the files you ask Claude to write. Its one MCP server is the remote Chicago Cityscape connector above; the only change it can make to your account is adding a property to My Faves when you ask. You can disconnect it at any time in Chicago Cityscape's My Account.
+- **Runs**: nothing on your machine. The plugin has no skills, hooks, scripts or background processes.
+- **Sends**: requests only to `https://www.chicagocityscape.com/mcp`, with each tool's arguments (an address, PIN or county) and an OAuth token from your sign-in. The connector never sees your password or payment details.
+- **Changes**: the only change it can make to your account is adding a property to My Faves when you ask. You can disconnect it at any time in Chicago Cityscape's My Account.
+- **Stores**: nothing on your machine.
 
-See the [Chicago Cityscape privacy policy](https://help.chicagocityscape.com/privacypolicy) for how chicagocityscape.com handles API requests.
+See the [Chicago Cityscape privacy policy](https://help.chicagocityscape.com/privacypolicy) for how chicagocityscape.com handles your data.
 
 ## Installation
 
-In Claude, find **Chicago Cityscape** in the plugin directory and add it.
+In Claude, find **Chicago Cityscape** in the plugin directory and add it, then sign in with your Chicago Cityscape account when Claude asks.
 
-To install from this repository in Claude Code instead:
-
-```bash
-git clone https://github.com/ChicagoCityscape/claude-code-skills.git
-claude --plugin-dir ./claude-code-skills
-```
+You can also add the connector by itself: in Claude, go to **Settings**, then **Connectors**, and add a custom connector with the URL `https://www.chicagocityscape.com/mcp`.
 
 ## License
 
