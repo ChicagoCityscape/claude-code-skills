@@ -1,7 +1,7 @@
 {
   "name": "chicago-cityscape",
   "displayName": "Chicago Cityscape",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Look up Chicago-area Property Reports in Claude: zoning, property taxes, permits, violations, sales, ownership, incentives and transit for any property in 13 counties in Illinois, Indiana and Wisconsin, through the Chicago Cityscape connector.",
   "author": {
     "name": "Chicago Cityscape",
@@ -11,9 +11,5 @@
   "repository": "https://github.com/ChicagoCityscape/claude-code-skills",
   "license": "MIT",
   "icon": "./.claude-plugin/icon.png",
-  "documentationUrl": "https://github.com/ChicagoCityscape/claude-code-skills#readme",
-  "privacyPolicyUrl": "https://help.chicagocityscape.com/privacypolicy",
-  "termsOfServiceUrl": "https://help.chicagocityscape.com/usageguidelines",
-  "supportUrl": "https://www.chicagocityscape.com/contact.php",
   "keywords": ["chicago", "real-estate", "zoning", "property", "permits", "property-taxes", "cook-county", "mcp"]
 }
