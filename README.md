@@ -2,7 +2,7 @@
 
 A Claude plugin that adds the [Chicago Cityscape](https://www.chicagocityscape.com) connector, so Claude can read Property Reports for any property in 13 counties in Illinois, Indiana and Wisconsin: zoning and the uses it allows, property class and building characteristics, property taxes, building permits, violations, sales, ownership, development incentives and nearby transit.
 
-Want Claude Code to call the Chicago Cityscape APIs directly with your API key? Use the **Chicago Cityscape API** plugin instead. Its source is [ChicagoCityscape/claude-code-api-skill](https://github.com/ChicagoCityscape/claude-code-api-skill).
+It also includes a reference skill for the Chicago Cityscape APIs. Want Claude Code to call those APIs directly with your API key? Use the separate **Chicago Cityscape API** plugin. Its source is [ChicagoCityscape/claude-code-api-skill](https://github.com/ChicagoCityscape/claude-code-api-skill).
 
 ## What's included
 
@@ -20,13 +20,17 @@ It works in claude.ai, the desktop app, Cowork and Claude Code. How much of each
 
 Counties covered: Cook, Lake, DuPage, Will, Kane, Kendall, McHenry, Peoria, Sangamon and Winnebago in Illinois; Lake in Indiana; Milwaukee and Dane in Wisconsin.
 
+### Skill: Chicago Cityscape API reference
+
+Documentation for the Property Report, Zoning, Parcels, Places, Sources, Query, Zoning Explorer, Search, Incentives Dictionary and Pending Permits APIs: what each endpoint takes and returns, and which one fits a question. Claude uses it to explain the APIs and help you write code against them. It doesn't call the APIs or read an API key. You can also invoke it with `/chicago-cityscape-api`.
+
 ## Requirements
 
 A Chicago Cityscape account. Sign up at [chicagocityscape.com](https://www.chicagocityscape.com). No API key is needed.
 
 ## What this plugin runs, sends, and fetches
 
-- **Runs**: nothing on your machine. The plugin has no skills, hooks, scripts or background processes.
+- **Runs**: nothing on your machine. The skill is documentation only, and the plugin has no hooks, scripts or background processes.
 - **Sends**: requests only to `https://www.chicagocityscape.com/mcp`, with each tool's arguments (an address, PIN or county) and an OAuth token from your sign-in. The connector never sees your password or payment details.
 - **Changes**: the only change it can make to your account is adding a property to My Faves when you ask. You can disconnect it at any time in Chicago Cityscape's My Account.
 - **Stores**: nothing on your machine.
